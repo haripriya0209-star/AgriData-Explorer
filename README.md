@@ -68,6 +68,27 @@ Includes crop, district, and state-level statistics.
    - Interactive dashboards with slicers for **State, Crop, Year**.  
    - Charts: bar, pie, line, scatter, geographical heatmaps.
   
+🌐 **Streamlit EDA App**
+
+🔎 Features
+- **Data Upload & Preview**  
+  - Upload CSV files and preview rows, column types, and summary stats.  
+- **Missing Value Analysis**  
+  - Interactive heatmap of missing data.  
+- **Crop Production Trends**  
+  - Select crop type (Rice, Wheat, Maize, Oilseeds, etc.) and visualize production trends.  
+- **State & District Insights**  
+  - Filter by state/district to view top producers.  
+- **Correlation Analysis**  
+  - Scatter plots showing relationship between **area cultivated vs production**.  
+- **Yield Efficiency**  
+  - Compare rice vs wheat yield across states.
+ 
+  
+▶️ **How to Run**
+  streamlit run eda.py
+
+  
 
 📊 **Power BI Features**
 - **Interactive Filters:** Crop Type, Region, Year.    

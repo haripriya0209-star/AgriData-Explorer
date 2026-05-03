@@ -1,6 +1,6 @@
 # 🌾 Agricultural Production Analytics (India)
 
-This repository contains a complete workflow for analyzing **crop production trends in India** using Python (for data cleaning, preprocessing, and exploratory analysis) and **Power BI** (for interactive dashboards and evaluator-friendly insights).
+This repository contains a complete workflow for analyzing **crop production trends in India** using Python (for data cleaning, preprocessing, and exploratory analysis), **SQL** (for query-based exploration), and **Power BI** (for interactive multi-page dashboards).
 
 ---
 
@@ -8,10 +8,12 @@ This repository contains a complete workflow for analyzing **crop production tre
 
 - `EDA.ipynb`  
   Jupyter notebook for cleaning, preprocessing, and exploratory analysis of agricultural datasets.
-- `AgriData_Explorer.pptx`  
-  Exported dashboard visuals and insights for evaluator review.
-- `cleaned_agri.csv`  
-  Final cleaned dataset used for analysis and dashboarding.
+- `Cleaned_Agri.csv`  
+  Final cleaned dataset (wide format) used for SQL analysis.
+- `ICRISAT-District Level Data - ICRISAT-District Level Data.csv`  
+  Raw source dataset from ICRISAT.
+- `sql_agri.sql`  
+  SQL scripts for database creation and 10 analytical queries.
 - `README.md`  
   Documentation for project overview, workflow, and usage.
 
@@ -46,8 +48,8 @@ AgriData Explorer solves this by:
 ## 🧠 Key Skills Gained
 
 - **Python**: Data Cleaning, Transformation, EDA  
-- **SQL**: Querying, Schema Design  
-- **Power BI**: Interactive Dashboards, Slicers  
+- **SQL**: Querying, Aggregations, CTEs, Window Functions  
+- **Power BI**: Data Modeling, Power Query (M), DAX Measures, Interactive Dashboards, Slicer Sync  
 - **Visualization**: Correlation & Trend Analysis with Plotly and Seaborn
 
 ---
@@ -55,10 +57,10 @@ AgriData Explorer solves this by:
 ## 📁 Data Sources
 
 **Dataset:** [ICRISAT – District Level Agricultural Data]  
-Includes crop, district, and state-level statistics.
+Includes crop, district, and state-level statistics across India from **1966 to 2017**.
 
 **Key Fields:**
-- Crop name (Rice, Wheat, Maize, Oilseeds, Millets, etc.)  
+- Crop name (Rice, Wheat, Maize, Oilseeds, Millets, Cotton, etc.)  
 - Area cultivated (1000 ha)  
 - Production (1000 tons)  
 - Yield (kg/ha)  
@@ -68,33 +70,111 @@ Includes crop, district, and state-level statistics.
 
 ## 🧩 Project Architecture
 
-1. **Data Collection & Cleaning**  
-   - Imported raw CSV files.  
-   - Removed irrelevant columns (e.g., safflower, linseed).  
-   - Handled missing values (zeros → NaN → median imputation).  
-   - Exported cleaned dataset (`cleaned_agri.csv`) for dashboard integration.
+### 1. Data Collection & Cleaning
+- Imported raw ICRISAT CSV files.
+- Removed irrelevant columns and handled missing values (`-1` → excluded from analysis).
+- Exported cleaned dataset (`Cleaned_Agri.csv`) for SQL and dashboard integration.
 
-2. **Exploratory Data Analysis (`EDA.ipynb`)**  
-   - Identified top crop-producing states and districts.  
-   - Analyzed 50-year production trends (Rice, Wheat, Sugarcane, Millets).  
-   - Correlation between **area cultivated vs production**.  
-   - Yield efficiency comparisons across states.
+### 2. Exploratory Data Analysis (`EDA.ipynb`)
+- Identified top crop-producing states and districts.
+- Analyzed 50-year production trends (Rice, Wheat, Sugarcane, Millets).
+- Correlation between **area cultivated vs production**.
+- Yield efficiency comparisons across states.
 
-3. **Database Design (SQL)**  
-   - Normalized schema for crop, district, and state-level data.  
-   - Query-based exploration for production/yield metrics.
+### 3. Database Design (SQL — `sql_agri.sql`)
+- Loaded cleaned data into MySQL (`agriculture_dataset` database).
+- 10 analytical queries answering key business questions:
+  1. Year-wise Trend of Rice Production Across States (Top 3)
+  2. Top 5 Districts by Wheat Yield Increase Over the Last 5 Years
+  3. States with the Highest Growth in Oilseed Production (5-Year Growth Rate)
+  4. District-wise Correlation Between Area and Production for Major Crops
+  5. Yearly Production Growth of Cotton in Top 5 Cotton Producing States
+  6. Districts with the Highest Groundnut Production in 2017
+  7. Annual Average Maize Yield Across All States
+  8. Total Area Cultivated for Oilseeds in Each State
+  9. Districts with the Highest Rice Yield
+  10. Compare the Production of Wheat and Rice for the Top 5 States Over 10 Years
 
-4. **Visualization (Power BI & Plotly)**  
-   - Interactive dashboards with slicers for **State, Crop, Year**.  
-   - Charts: bar, pie, line, scatter, geographical heatmaps.
+### 4. Power BI Data Transformation (Power Query)
+The raw wide-format CSV was reshaped into a **long (unpivoted) format** inside Power Query using the following steps:
+- Selected identifier columns (`Dist Code`, `Year`, `State Code`, `State Name`, `Dist Name`) and used **Unpivot Other Columns** to melt all crop columns into rows.
+- Extracted `crop` using a custom column formula (correctly handles multi-word crops like `KHARIF SORGHUM`, `PEARL MILLET`, `FINGER MILLET`):
+  ```m
+  if Text.Contains([Attribute], " AREA") then Text.BeforeDelimiter([Attribute], " AREA")
+  else if Text.Contains([Attribute], " PRODUCTION") then Text.BeforeDelimiter([Attribute], " PRODUCTION")
+  else if Text.Contains([Attribute], " YIELD") then Text.BeforeDelimiter([Attribute], " YIELD")
+  else [Attribute]
+  ```
+- Extracted `metric` (AREA / PRODUCTION / YIELD) using a separate custom column.
+- Removed the original `Attribute` column.
+- Changed `Value` data type to **Decimal Number**.
+- Filtered out rows where `Value < 0` to exclude missing data encoded as `-1`.
+
+**Final table structure (8 columns):**
+
+| Dist Code | Year | State Code | State Name | Dist Name | Value | crop | metric |
+|---|---|---|---|---|---|---|---|
+| 1 | 1966 | 14 | Chhattisgarh | Durg | 548 | RICE | AREA |
+| 1 | 1966 | 14 | Chhattisgarh | Durg | 185 | RICE | PRODUCTION |
+| 1 | 1966 | 14 | Chhattisgarh | Durg | 337.59 | RICE | YIELD |
+
+### 5. Power BI DAX Measures
+Custom measures created for chart accuracy:
+
+```dax
+Wheat Yield Increase =
+CALCULATE(
+    MAX('agriculture_dataset cleaned_agri'[Value]) - MIN('agriculture_dataset cleaned_agri'[Value]),
+    'agriculture_dataset cleaned_agri'[crop] = "WHEAT",
+    'agriculture_dataset cleaned_agri'[metric] = "YIELD",
+    'agriculture_dataset cleaned_agri'[Year] >= 2013,
+    'agriculture_dataset cleaned_agri'[Year] <= 2017
+)
+
+Oilseed Growth Rate =
+DIVIDE(
+    CALCULATE(SUM('agriculture_dataset cleaned_agri'[Value]), 'agriculture_dataset cleaned_agri'[Year]=2017) -
+    CALCULATE(SUM('agriculture_dataset cleaned_agri'[Value]), 'agriculture_dataset cleaned_agri'[Year]=2013),
+    CALCULATE(SUM('agriculture_dataset cleaned_agri'[Value]), 'agriculture_dataset cleaned_agri'[Year]=2013)
+) * 100
+
+Crop Area = CALCULATE(SUM('agriculture_dataset cleaned_agri'[Value]), 'agriculture_dataset cleaned_agri'[metric]="AREA")
+
+Crop Production = CALCULATE(SUM('agriculture_dataset cleaned_agri'[Value]), 'agriculture_dataset cleaned_agri'[metric]="PRODUCTION")
+```
+
+### 6. Power BI Dashboard (3 Pages)
+
+#### Page 12 — Trends
+Line charts showing production and yield trends over time:
+- Year-wise Trend of Rice Production (Top 3 States)
+- Annual Average Maize Yield Across All States
+- Yearly Production Growth of Cotton in Top 5 Cotton Producing States
+
+#### Page 13 — Bar Charts
+Bar charts for district and state-level comparisons:
+- Top 5 Districts by Wheat Yield Increase Over the Last 5 Years
+- States with the Highest Growth in Oilseed Production (5-Year Growth Rate)
+- Districts with the Highest Rice Yield
+- Districts with the Highest Groundnut Production in 2017
+- Total Area Cultivated for Oilseeds in Each State
+- Production of Wheat and Rice for the Top 5 States Over 10 Years
+
+#### Page 14 — Correlation
+- District-wise Correlation Between Area and Production for Major Crops (RICE, WHEAT, MAIZE) — Scatter chart
 
 ---
 
 ## 📊 Power BI Features
 
-- **Interactive Filters:** Crop Type, Region, Year.  
-- **Map Visuals:** Highlight yield disparities geographically.  
-- **Trend Lines:** Analyze production growth over decades.
+- **Unpivoted Data Model:** Long-format table with `crop`, `metric`, `Value` columns enabling dynamic cross-filtering.
+- **Visual-level Filters:** Each chart is independently filtered by `crop` and `metric` (e.g., Rice chart locked to `crop=RICE`, `metric=PRODUCTION`).
+- **Interactive Slicers:** Year (range slider), State Name, Dist Name, Crop, Metric — all synced across all 3 pages.
+- **Slicer Sync:** View → Sync Slicers used to synchronize all slicers across Pages 12, 13, 14.
+- **Edit Interactions:** Charts on the same page are set to **Filter** mode so clicking a state/district filters all other visuals.
+- **Top N Filters:** Applied on State Name / Dist Name fields to show Top 3 / Top 5 / Top 10 automatically.
+- **DAX Measures:** Custom measures for yield increase and growth rate calculations.
+- **KPI Cards:** Total Production, Total Area, Average Yield displayed at the top of the dashboard.
 
 ---
 
@@ -109,23 +189,25 @@ Includes crop, district, and state-level statistics.
 ## 📈 Project Deliverables
 
 - `EDA.ipynb` — Python notebook for cleaning & EDA  
-- SQL scripts for database creation & queries  
-- Power BI dashboard (`AgriData_Explorer.pptx`)  
-- `cleaned_agri.csv` — Final cleaned dataset  
-- Documentation & project report
+- `sql_agri.sql` — SQL scripts for database creation & 10 analytical queries  
+- Power BI dashboard (3-page interactive report)  
+- `Cleaned_Agri.csv` — Final cleaned dataset  
+- `README.md` — Project documentation
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Component     | Tool/Language                  |
-|---------------|-------------------------------|
-| Data Cleaning | Python (Pandas, NumPy)         |
-| EDA           | Jupyter Notebook (`EDA.ipynb`) |
-| Visualization | Power BI, Plotly, Seaborn      |
-| Database      | MySQL                          |
-| Documentation | Markdown (.md), PDF            |
-| Analysis      | VSCode                         |
+| Component        | Tool / Language                          |
+|------------------|------------------------------------------|
+| Data Cleaning    | Python (Pandas, NumPy)                   |
+| EDA              | Jupyter Notebook (`EDA.ipynb`)           |
+| Database         | MySQL                                    |
+| Data Modeling    | Power Query (M Language)                 |
+| DAX Measures     | Power BI DAX                             |
+| Visualization    | Power BI, Plotly, Seaborn                |
+| Documentation    | Markdown (.md)                           |
+| IDE              | VS Code                                  |
 
 ---
 
@@ -137,7 +219,7 @@ Includes crop, district, and state-level statistics.
    cd AgriData-Explorer
    ```
 
-2. Install dependencies:
+2. Install Python dependencies:
    ```bash
    pip install pandas numpy seaborn matplotlib plotly
    ```
@@ -147,4 +229,11 @@ Includes crop, district, and state-level statistics.
    jupyter notebook EDA.ipynb
    ```
 
-4. The cleaned dataset (`cleaned_agri.csv`) is included — no separate cleaning step needed.
+4. Load SQL data:
+   - Import `Cleaned_Agri.csv` into MySQL as the `cleaned_agri` table.
+   - Run `sql_agri.sql` for all queries.
+
+5. Open Power BI:
+   - Connect to the MySQL `agriculture_dataset` database.
+   - Power Query transformations (unpivot, crop/metric extraction) are already applied.
+   - Slicers and interactions are pre-configured across all 3 dashboard pages.
